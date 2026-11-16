@@ -135,6 +135,45 @@ alter table trips add column if not exists active_from date;
 alter table trips add column if not exists active_to   date;
 alter table trips add column if not exists days_of_week smallint[];
 
+-- ---------------------------------------------------------------------------
+-- BLOG POSTS — admin-authored articles shown on the public /blog pages.
+-- `published=false` keeps a draft invisible to the public (public SELECT
+-- policy filters on published, admins can read/write everything).
+-- Body is plain text (line breaks preserved) — never raw HTML, to avoid XSS.
+-- ---------------------------------------------------------------------------
+create table if not exists blog_posts (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  slug        text unique not null,
+  excerpt     text,
+  cover_url   text,
+  body        text not null default '',
+  published   boolean not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- ACTIVITY LOG — one row per admin add/edit/delete/publish action, with the
+-- signed-in admin's email. Written by the admin panel after each successful
+-- change; readable only by admins.
+-- ---------------------------------------------------------------------------
+create table if not exists activity_log (
+  id         uuid primary key default gen_random_uuid(),
+  user_email text,
+  action     text not null,          -- e.g. 'stop.add', 'trip.delete', 'blog.publish'
+  entity     text,                   -- e.g. 'stops', 'trips', 'blog_posts'
+  detail     text,                   -- human-readable summary
+  created_at timestamptz not null default now()
+);
+create index if not exists activity_log_created_at_idx on activity_log (created_at);
+
+-- Contact details shown on the public site (Contact page + floating WhatsApp
+-- button). Stored under key 'contact': { "email": "...", "whatsapp": "91XXXXXXXXXX" }.
+insert into site_settings (key, value)
+values ('contact', '{"email": null, "whatsapp": null}'::jsonb)
+on conflict (key) do nothing;
+
 -- ============================================================================
 -- ROW LEVEL SECURITY
 --
@@ -155,6 +194,8 @@ alter table announcements      enable row level security;
 alter table analytics_events   enable row level security;
 alter table site_settings      enable row level security;
 alter table service_alerts     enable row level security;
+alter table blog_posts         enable row level security;
+alter table activity_log       enable row level security;
 
 -- Public read access to schedule data
 drop policy if exists "public read stops" on stops;
@@ -180,6 +221,24 @@ create policy "public read announcements" on announcements for select using (tru
 
 drop policy if exists "public read service alerts" on service_alerts;
 create policy "public read service alerts" on service_alerts for select using (true);
+
+-- Blog: public sees published posts only; signed-in admins see everything
+drop policy if exists "public read published posts" on blog_posts;
+create policy "public read published posts" on blog_posts for select
+  using (published = true);
+
+drop policy if exists "admin read posts" on blog_posts;
+create policy "admin read posts" on blog_posts for select
+  using (auth.role() = 'authenticated');
+
+-- Activity log: admins only, both directions
+drop policy if exists "admin read activity log" on activity_log;
+create policy "admin read activity log" on activity_log for select
+  using (auth.role() = 'authenticated');
+
+drop policy if exists "admin write activity log" on activity_log;
+create policy "admin write activity log" on activity_log for insert
+  with check (auth.role() = 'authenticated');
 
 -- Admin (any authenticated user) can write schedule data
 drop policy if exists "admin write stops" on stops;
@@ -212,6 +271,10 @@ create policy "admin write announcements" on announcements for all
 
 drop policy if exists "admin write service alerts" on service_alerts;
 create policy "admin write service alerts" on service_alerts for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+drop policy if exists "admin write blog posts" on blog_posts;
+create policy "admin write blog posts" on blog_posts for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- Analytics: public can log events, only admins can read them back

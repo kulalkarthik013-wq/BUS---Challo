@@ -11,6 +11,7 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
+app.set('trust proxy', 1); // correct req.ip/protocol behind Vercel/ proxies
 const PORT = process.env.PORT || 3000;
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
 
@@ -20,9 +21,14 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(),microphone=()');
+  // The admin panel's generated markup uses inline onclick handlers
+  // throughout (public/js/admin.js). It sits behind Supabase Auth and is
+  // noindex, so we allow 'unsafe-inline' for /admin only — public pages
+  // keep the strict policy.
+  const isAdmin = req.path === '/admin' || req.path === '/admin.html';
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net",
+    "script-src 'self' https://cdn.jsdelivr.net" + (isAdmin ? " 'unsafe-inline'" : ''),
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
     "font-src https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://*.supabase.co",
@@ -67,7 +73,48 @@ app.get('/env.js', (req, res) => {
   );
 });
 
+// Dynamic sitemap + robots: built per-request from the real Host header, so
+// they are correct on localhost, a preview deploy, AND production with zero
+// config. Sitemap also lists every stop page and published blog post, fetched
+// from Supabase's public REST API (anon key — same data the site already
+// exposes publicly). Cached for 10 minutes.
+const reqOrigin = req => `${req.protocol}://${req.get('host')}`;
+let sitemapCache = { at: 0, xml: '' };
+async function buildSitemap(origin) {
+  const pages = [
+    ['/', 'hourly', '1.0'], ['/blog', 'weekly', '0.7'], ['/about', 'monthly', '0.5'],
+    ['/faq', 'monthly', '0.5'], ['/contact', 'monthly', '0.5'],
+    ['/privacy', 'yearly', '0.3'], ['/terms', 'yearly', '0.3'], ['/cookies', 'yearly', '0.3'],
+  ];
+  const urls = pages.map(([p, cf, pr]) => ({ loc: origin + p, changefreq: cf, priority: pr }));
+  try {
+    const h = { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY };
+    const [stops, posts] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/stops?select=slug&order=name&limit=5000`, { headers: h }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/blog_posts?select=slug&published=eq.true&order=created_at.desc`, { headers: h }).then(r => r.json()),
+    ]);
+    (Array.isArray(stops) ? stops : []).forEach(s => urls.push({ loc: `${origin}/s/${encodeURIComponent(s.slug)}`, changefreq: 'hourly', priority: '0.8' }));
+    (Array.isArray(posts) ? posts : []).forEach(p => urls.push({ loc: `${origin}/blog/${encodeURIComponent(p.slug)}`, changefreq: 'weekly', priority: '0.6' }));
+  } catch (e) { /* Supabase unreachable — static pages still listed */ }
+  const body = urls.map(u => `  <url><loc>${u.loc}</loc><changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
+}
+app.get('/sitemap.xml', async (req, res) => {
+  if (Date.now() - sitemapCache.at > 600000) {
+    sitemapCache = { at: Date.now(), xml: await buildSitemap(reqOrigin(req)) };
+  }
+  res.type('application/xml').send(sitemapCache.xml);
+});
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${reqOrigin(req)}/sitemap.xml\n`);
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Browsers auto-request /favicon.ico — serve the PNG icon for it.
+app.get('/favicon.ico', (req, res) => {
+  res.type('image/png').sendFile(path.join(__dirname, 'public', 'favicon-32.png'));
+});
 
 // Pretty stop links: /s/neermarga -> public/index.html (slug is read from the URL client-side)
 app.get('/s/:slug', (req, res) => {
@@ -81,6 +128,7 @@ const legalPages = {
   '/cookies': 'cookies.html',
   '/faq': 'faq.html',
   '/contact': 'contact.html',
+  '/about': 'about.html',
 };
 for (const [route, file] of Object.entries(legalPages)) {
   app.get(route, (req, res) => res.sendFile(path.join(__dirname, 'public', file)));
@@ -90,8 +138,20 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
+// Blog: /blog lists posts, /blog/<slug> shows one post (slug read client-side)
+app.get('/blog', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'blog.html'));
+});
+app.get('/blog/:slug', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'blog-post.html'));
+});
+
 app.use((req, res) => res.status(404).sendFile(path.join(__dirname, 'public', '404.html')));
 
-app.listen(PORT, () => {
-  console.log(`Bus Timings running on http://localhost:${PORT}  (admin: /admin)`);
-});
+// Local dev listens here; on Vercel the exported app is served serverlessly.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Bus Timings running on http://localhost:${PORT}  (admin: /admin)`);
+  });
+}
+module.exports = app;

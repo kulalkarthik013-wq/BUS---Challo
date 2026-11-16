@@ -1,120 +1,137 @@
-# Bus Timings — v2 (Supabase + Node)
+# Mangaluru Bus Timings
 
-Live bus-stop timings site. Stops, buses, routes, trips, admin accounts, bus
-photos, announcements and analytics all live in Supabase (Postgres + Auth +
-Storage). The Node server only serves the static site and hands the browser
-its Supabase connection details — there is no custom backend logic or
-password to manage anymore.
+A free, live bus-arrival site for Mangaluru commuters. Visitors search a bus
+stop (or plan a From → To journey) and see scheduled arrival times, bus names,
+registration numbers, routes and destinations — plus QR codes at stops for
+instant lookup. An admin panel manages all the data.
 
-## What changed from v1
-- **Supabase instead of a JSON file.** Stops/buses/routes/trips/announcements
-  live in Postgres; Row Level Security (not server code) decides who can
-  read and write what (see `supabase/schema.sql`).
-- **Supabase Auth instead of one shared password.** Each admin signs in with
-  their own email + password, created in the Supabase dashboard — no
-  public sign-up page.
-- **Routes** are now a first-class thing (e.g. "Route 210": an ordered list
-  of stops) separate from **trips** (one bus's scheduled run, with actual
-  times). A trip can optionally follow a route.
-- **Bus photos**, stored in a public Supabase Storage bucket.
-- **From → To search** on the homepage, alongside the original by-stop search.
-- **Announcements**: admin-authored messages shown as a header banner or a
-  popup, switchable between the two, turned on/off without deleting them.
-- **Analytics**: page views, QR scans, and From→To searches are logged as
-  events; the admin Analytics tab aggregates them (today / 7 days / 30 days
-  / all time), with a views-per-day chart and top-stop / top-route tables.
-- QR codes now link with `?src=qr` so a scan is distinguishable from a
-  regular page view in the analytics.
+**Stack:** Node.js + Express (static server) · Supabase (Postgres + Auth +
+Storage + Row Level Security) · vanilla JS frontend · installable PWA ·
+English / Kannada / Hindi UI.
+
+## Features
+
+**Public site**
+- Search by stop, or From → To journey planner, with autocomplete
+- Live "time to next bus" per stop (IST), favorites & recent stops
+  (`locallocalStorage`, per visitor)
+- Today / Tomorrow schedules, printable per-stop timetable
+- Service-alert badges (delayed / cancelled / detour), announcement
+  banner & popup, maintenance-mode countdown page
+- QR deep links (`/s/<slug>?src=qr`), PWA offline app-shell
+- Language picker: English, Kannada, Hindi — remembered per visitor
+- SEO: dynamic sitemap/robots (real domain, all stops + blog posts),
+  canonical + Open Graph + Twitter cards, real PNG favicons & OG image
+
+**Admin panel (`/admin`)**
+- Tabs: Dashboard · Stops · Buses · Routes · Trips & times · Announcements ·
+  Blog · Analytics · Activity log · Settings
+- Stops: bulk paste, CSV import, per-stop QR + printable QR sheet; slugs are
+  permanent so printed QR codes never break
+- Buses: name, registration, photo upload to Supabase Storage
+- Routes: named ordered stop lists (seeded with 100 Mangaluru routes)
+- Trips: one scheduled run with per-stop times, day-of-week and date-range
+  restrictions, bulk paste, CSV export
+- Announcements: banner or popup, toggle without deleting
+- Maintenance mode with countdown + custom visitor message
+- Service alerts per route
+- Blog: title/slug/excerpt/cover/body/published — feeds public `/blog`
+- Analytics: page views, QR scans, From→To searches (today/7d/30d/all),
+  bar chart, top stops/routes
+- Activity log: every admin add/edit/delete with email + timestamp
+- Settings: contact email + WhatsApp number (enables the floating
+  WhatsApp button and the Contact page details)
 
 ## One-time setup
-1. **Create a Supabase project** at supabase.com (free tier is enough to start).
-2. **Run the schema.** Dashboard → SQL Editor → New query → paste the
-   contents of `supabase/schema.sql` → Run. This creates every table, its
-   Row Level Security policies, and the `bus-photos` storage bucket.
-   - If the `insert into storage.buckets` statement errors with a
-     permissions message, create the bucket by hand instead: Storage →
-     New bucket → name it exactly `bus-photos` → toggle **Public** → Create,
-     then re-run just the `storage.objects` policy statements near the
-     bottom of the file.
-3. **(Optional) Import your old data.** Only on a fresh database: SQL Editor
-   → paste `supabase/seed.sql` → Run. This recreates the 5 stops, 3 buses,
-   2 routes (reconstructed from the old trip patterns) and 22 trips from
-   the previous `data.json`.
-4. **Create your admin account(s).** Dashboard → Authentication → Users →
-   Add user → set an email + password for each admin. These are the only
-   accounts that can sign in at `/admin`.
-5. **Get your API keys.** Dashboard → Project Settings → API → copy the
-   **Project URL** and the **anon / public** key (not the `service_role`
-   key — that one must never be used in a browser).
-6. **Configure the server.** Copy `.env.example` to `.env` and fill in
-   `SUPABASE_URL` and `SUPABASE_ANON_KEY` from step 5.
-7. **Install and run.**
-   ```
+
+1. **Create a Supabase project** at [supabase.com](https://supabase.com)
+   (free tier is enough).
+2. **Run the schema.** Dashboard → SQL Editor → paste
+   `supabase/schema.sql` → Run. Creates all tables, RLS policies and the
+   `bus-photos` + `blog-covers` storage buckets. Safe to re-run.
+   - If the bucket insert errors, create `bus-photos` manually (Storage →
+     New bucket → Public) and re-run the `storage.objects` policies.
+3. **Seed data (optional).**
+   - `supabase/seed.sql` — the original 5-stop demo dataset (fresh DBs only).
+   - `supabase/routes-seed.sql` — **100 real Mangaluru bus routes with
+     ~183 stops** in order. Run this to populate Routes + Stops.
+4. **Create admin account(s).** Authentication → Users → Add user
+   (email + password). There is no public sign-up — intentional.
+5. **Copy API keys.** Project Settings → API → **Project URL** and
+   **anon public key** (never the `service_role` key).
+6. **Configure & run.**
+   ```bash
    npm install
-   npm start
+   cp .env.example .env   # fill in SUPABASE_URL + SUPABASE_ANON_KEY
+   npm start              # http://localhost:3000  (admin: /admin)
    ```
-   Public site: http://localhost:3000 · Admin: http://localhost:3000/admin
 
-## Using the admin
-- **Stops** — paste names, one per line. Each gets a permanent `/s/<slug>`
-  link and a QR code ("QR" button, or "Print all QR codes" for the whole
-  sheet). Renaming a stop never changes its link or QR code.
-- **Buses** — add name + registration; click a bus's avatar to upload a photo.
-- **Routes** — define a named, ordered path of stops (e.g. "210": BC Road →
-  Kalpane → Neermarga). Optional — trips can be entered without one.
-- **Trips & times** — one trip = one scheduled run of a bus. Pick a route to
-  pre-fill the stop list, or add stops manually; enter the actual time at
-  each stop (supports pasting many rows at once).
-- **Announcements** — write a message, choose banner or popup, publish.
-  Switch an existing one between banner/popup, or turn it off, without
-  losing it. The public site remembers (per browser session) that someone
-  dismissed a banner or has seen a popup, so it won't nag on every page.
-- **Analytics** — total views / QR scans / From→To searches over a chosen
-  date range, a views-per-day chart, and the most-viewed, most-scanned, and
-  most-searched-for stops and routes.
+## Deploy to Vercel
 
-## Notes on scale and security
-- Analytics are stored as raw events (one row per view/scan/search), which
-  keeps the dashboard flexible but will grow a large table over time on a
-  busy site. If that becomes a problem, add a scheduled job that rolls old
-  rows up into daily summaries and trims the raw table.
-- The anon key is meant to be public — it only grants what the Row Level
-  Security policies in `schema.sql` allow (public read, public insert of
-  analytics events, nothing else). Never put the `service_role` key in any
-  file under `public/`.
-- The RLS policies treat *any* signed-in Supabase user as an admin, which is
-  right for a small, trusted team. If you need finer-grained roles later
-  (e.g. an editor who can't delete), add an `admin_profiles` table with a
-  role column and reference it from the policies instead of
-  `auth.role() = 'authenticated'`.
-- The v1 project folder you uploaded had a leaked session-cookie file (`j`)
-  and a duplicate data file (`d.json`) sitting in the project root — worth
-  deleting from wherever that project is stored, and treating that old
-  session as compromised, even though this rebuild no longer uses that
-  auth scheme at all.
+`vercel.json` routes every request through `server.js` (without it Vercel
+serves `public/` statically and `/env.js` 404s — the classic "admin login
+does nothing" bug). `server.js` exports the Express app for the serverless
+runtime and only calls `.listen()` locally.
 
-## Deploy
-Host the Node app anywhere (Render, Railway, Fly.io, a VPS) behind HTTPS,
-set the two env vars there, and use a custom domain **before** printing QR
-codes (QR links are generated from `location.origin`, so printing from a
-temporary URL means reprinting later).
+1. Import the repo in Vercel.
+2. Project Settings → Environment Variables → add `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY`.
+3. Deploy. `/sitemap.xml` and `/robots.txt` pick up the real domain
+automatically.
 
-## Structure
+## Project structure
+
 ```
-bus-timings/
-├── server.js              Static file server + /env.js (Supabase config for the browser)
-├── package.json
-├── .env.example
-├── supabase/
-│   ├── schema.sql          Tables, RLS policies, storage bucket — run first
-│   └── seed.sql            Optional: imports the old data.json content
-├── public/
-│   ├── index.html          Public site (/, /s/<slug>)
-│   ├── admin.html          Admin panel (/admin)
-│   ├── style.css
-│   └── js/
-│       ├── shared.js       Supabase client + formatting/analytics helpers
-│       ├── site.js         Public site logic
-│       └── admin.js        Admin panel logic
-└── README.md
+server.js               Express: static files, /env.js, pretty routes,
+                        security headers + CSP, rate limit, dynamic
+                        sitemap/robots
+vercel.json             Routes all traffic through server.js on Vercel
+supabase/
+  schema.sql            Tables, RLS policies, storage buckets — run first
+  seed.sql              Optional demo data (fresh DB)
+  routes-seed.sql       100 real routes + ~183 stops (generated)
+scripts/
+  translate-i18n.js     Fill missing lang.js keys via MyMemory API
+  gen-routes-seed.js    Regenerate routes-seed.sql from route data
+public/
+  index.html            Public site (/, /s/<slug>)
+  admin.html            Admin panel (/admin)
+  blog.html             Blog list · blog-post.html single post
+  about/contact/faq/privacy/terms/cookies/404.html
+  style.css             Indigo/cyan palette, dark mode, responsive
+  sw.js                 PWA service worker (per-URL page caching)
+  manifest.webmanifest  PWA manifest
+  js/
+    shared.js           Supabase client, helpers, theme toggle
+    site.js             Public site logic (search, ETAs, journeys)
+    admin.js            Admin panel logic (all tabs)
+    lang.js             EN/KN/HI dictionaries + picker + prompt
+    blog.js             Public blog rendering
+    contact.js          Contact page settings lookup
+    footer.js           Shared footer + canonical/OG urls
+    cookies.js          Cookie-consent banner
+    theme-init.js       Pre-paint theme bootstrap (external — CSP-safe)
 ```
+
+## Security model
+
+- **RLS is the authorization layer** — the anon key is public by design;
+  it only grants what the policies allow (public reads, analytics
+  inserts, nothing else).
+- **Admin = any signed-in Supabase Auth user.** Fine for a small trusted
+  team; for roles later, add an `admin_profiles` table.
+- `/env.js` exposes only URL + anon key. `service_role` never ships.
+- CSP: strict `script-src 'self'` on public pages (no inline handlers);
+  `/admin` allows `'unsafe-inline'` because its generated UI uses inline
+  handlers — it's auth-gated and `noindex`.
+- All user-entered text is HTML-escaped; blog bodies are plain text.
+- Rate limit: 300 req/min per IP (in-memory).
+
+## Known limits
+
+- Language picker translates site chrome, not admin-entered content
+  (stop names, announcements, blog posts).
+- Blog bodies are plain text (line breaks kept), not rich HTML — avoids
+  XSS from unescaped admin input.
+- Analytics are raw events; on a busy site add a rollup job later.
+- Kannada/Hindi strings are machine-translated — worth a native review.

@@ -1,4 +1,4 @@
-// Injects the site footer on public pages (index.html and legal pages).
+// Injects the site footer on public pages (index.html, blog, legal pages).
 // Not loaded by admin.html.
 (function () {
   // Self-referencing canonical + absolute og:url, correct on any domain.
@@ -10,12 +10,14 @@
   if (og) og.content = canon;
 
   const links = [
-    ['/', 'Home'],
-    ['/privacy', 'Privacy Policy'],
-    ['/terms', 'Terms of Service'],
-    ['/cookies', 'Cookie Policy'],
-    ['/faq', 'FAQ'],
-    ['/contact', 'Contact Us'],
+    ['/', 'home', 'Home'],
+    ['/blog', 'blog', 'Blog'],
+    ['/about', 'about', 'About'],
+    ['/privacy', 'privacy', 'Privacy Policy'],
+    ['/terms', 'terms', 'Terms of Service'],
+    ['/cookies', 'cookiesPolicy', 'Cookie Policy'],
+    ['/faq', 'faq', 'FAQ'],
+    ['/contact', 'contact', 'Contact Us'],
   ];
   const year = new Date().getFullYear();
   const el = document.createElement('footer');
@@ -25,17 +27,17 @@
       <div class="fbrand">
         <a class="brand" href="/">
           <span class="logo"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 11h16M8 21v-4M16 21v-4M8 14h.01M16 14h.01"/></svg></span>
-          Bus Timings
+          Mangaluru Bus Timings
         </a>
-        <p class="sub">Live bus arrival times for your daily commute.</p>
+        <p class="sub" data-i18n="footerTag">Live bus arrival times for your daily commute.</p>
       </div>
       <nav class="flinks" aria-label="Footer">
-        ${links.map(([h, l]) => `<a href="${h}">${l}</a>`).join('')}
+        ${links.map(([h, k, l]) => `<a href="${h}" data-i18n="${k}">${l}</a>`).join('')}
       </nav>
     </div>
     <div class="base">
-      <span>&copy; ${year} Bus Timings. All rights reserved.</span>
-      <span>Schedules are indicative — always confirm on the platform.</span>
+      <span>&copy; ${year} Mangaluru Bus Timings. <span data-i18n="rights">All rights reserved.</span></span>
+      <span data-i18n="indicative">Schedules are indicative — always confirm on the platform.</span>
     </div>`;
   document.body.appendChild(el);
 })();

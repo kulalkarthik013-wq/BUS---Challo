@@ -7,16 +7,16 @@
 <title>Admin · Bus Timings</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+Kannada:wght@400;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
-<script>try{var t=localStorage.getItem('bt-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<script src="/js/theme-init.js"></script>
 </head>
 <body>
 <header class="top">
   <div class="in">
     <span class="brand"><span class="logo"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 11h16M8 21v-4M16 21v-4M8 14h.01M16 14h.01"/></svg></span>Bus Timings Admin</span>
     <div class="h-right">
-      <button id="themeBtn" class="btn btn-s btn-sm" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
+      <button id="themeBtn" class="btn btn-s btn-sm" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
       <button class="btn btn-s btn-sm" onclick="changePw()" title="Change admin password">Password</button>
       <span id="who" class="row"></span>
     </div>

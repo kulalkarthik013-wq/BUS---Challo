@@ -15,6 +15,14 @@ function toast(msg, kind = 'ok') {
 }
 const alert = m => toast(m, 'err');
 
+// Activity log — records who did what, after each successful change.
+async function alog(action, entity, detail) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('activity_log').insert({ user_email: user && user.email || null, action, entity, detail: String(detail || '').slice(0, 300) });
+  } catch {}
+}
+
 // ------------------------------------------------------------------- auth
 async function init() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -89,12 +97,12 @@ function shell() {
     ${[['Stops', S.stops.length], ['Buses', S.buses.length], ['Routes', S.routes.length], ['Trips', S.trips.length]]
       .map(([l, v]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}
   </div>
-  <nav class="tabs">${[['dashboard', 'Dashboard'], ['stops', 'Stops'], ['buses', 'Buses'], ['routes', 'Routes'], ['trips', 'Trips & times'], ['announcements', 'Announcements'], ['analytics', 'Analytics']]
+  <nav class="tabs">${[['dashboard', 'Dashboard'], ['stops', 'Stops'], ['buses', 'Buses'], ['routes', 'Routes'], ['trips', 'Trips & times'], ['announcements', 'Announcements'], ['blog', 'Blog'], ['analytics', 'Analytics'], ['activity', 'Activity log'], ['settings', 'Settings']]
     .map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" onclick="tab='${k}';shell()">${l}</button>`).join('')}</nav>
-  <div class="qa-bar">${[['stops', 'bulk', '+ Add stop'], ['buses', 'bn', '+ Add bus'], ['routes', 'rCode', '+ Add route'], ['trips', null, '+ Add trip'], ['announcements', 'annMsg', '+ Announcement']]
+  <div class="qa-bar">${[['stops', 'bulk', '+ Add stop'], ['buses', 'bn', '+ Add bus'], ['routes', 'rCode', '+ Add route'], ['trips', null, '+ Add trip'], ['announcements', 'annMsg', '+ Announcement'], ['blog', 'bpTitle', '+ New post']]
     .map(([k, f, l]) => `<button class="btn btn-s btn-sm" onclick="quickGo('${k}','${f}')">${l}</button>`).join('')}</div>
   <div id="body" class="mt2"></div>`;
-  ({ dashboard: dashboardView, stops: stopsView, buses: busesView, routes: routesView, trips: tripsView, announcements: announcementsView, analytics: analyticsView })[tab]();
+  ({ dashboard: dashboardView, stops: stopsView, buses: busesView, routes: routesView, trips: tripsView, announcements: announcementsView, blog: blogView, analytics: analyticsView, activity: activityView, settings: settingsView })[tab]();
 }
 function quickGo(k, focusId) {
   tab = k; shell();
@@ -130,7 +138,7 @@ async function dashboardView() {
     <div class="stat"><b>${(an || []).length}</b><span>Live announcements</span></div>
   </div>
   <h2 class="sec-title" style="margin-top:22px">Jump to</h2>
-  <div class="qa-bar">${[['stops', 'Stops'], ['buses', 'Buses'], ['routes', 'Routes'], ['trips', 'Trips & times'], ['announcements', 'Announcements'], ['analytics', 'Analytics']]
+  <div class="qa-bar">${[['stops', 'Stops'], ['buses', 'Buses'], ['routes', 'Routes'], ['trips', 'Trips & times'], ['announcements', 'Announcements'], ['blog', 'Blog'], ['analytics', 'Analytics']]
     .map(([k, l]) => `<button class="btn btn-s" onclick="tab='${k}';shell()">${l}</button>`).join('')}</div>
   <p class="sub mt2">KPI totals are above · today's visitor activity and live flags are here. Use the tabs for day-to-day edits.</p>`;
 }
@@ -181,6 +189,7 @@ async function addStops() {
   const { error } = await supabase.from('stops').insert(rows);
   if (error) return alert('Could not add stops: ' + error.message);
   toast(rows.length + ' stop' + (rows.length === 1 ? '' : 's') + ' added');
+  alog('stop.add', 'stops', rows.length + ' added: ' + names.join(', '));
   await loadData(); shell();
 }
 async function renameStop(id, v) {
@@ -188,13 +197,16 @@ async function renameStop(id, v) {
   const { error } = await supabase.from('stops').update({ name: v }).eq('id', id);
   if (error) return alert('Could not rename: ' + error.message);
   S.stops.find(s => s.id === id).name = v;
+  alog('stop.rename', 'stops', v);
 }
 function delStop(id) {
   const used = S.trips.filter(t => t.trip_stops.some(e => e.stop_id === id)).length;
   confirmBox('Delete stop?', `Delete "${stopName(id)}"?` + (used ? ` It is used in ${used} trip(s) and will be removed from them too.` : ''), async () => {
+    const nm = stopName(id);
     const { error } = await supabase.from('stops').delete().eq('id', id);
     if (error) return toast('Could not delete: ' + error.message, 'err');
     toast('Stop deleted');
+    alog('stop.delete', 'stops', nm);
     await loadData(); shell();
   });
 }
@@ -239,6 +251,7 @@ async function addBus() {
   const { error } = await supabase.from('buses').insert({ name, reg: $('br').value.trim() });
   if (error) return alert('Could not add bus: ' + error.message);
   toast('Bus added');
+  alog('bus.add', 'buses', name + ($('br').value.trim() ? ' ' + $('br').value.trim() : ''));
   await loadData(); shell();
 }
 async function editBus(id, k, v) {
@@ -246,6 +259,7 @@ async function editBus(id, k, v) {
   const { error } = await supabase.from('buses').update({ [k]: v.trim() }).eq('id', id);
   if (error) return alert('Could not save: ' + error.message);
   S.buses.find(b => b.id === id)[k] = v.trim();
+  alog('bus.edit', 'buses', k + ' = ' + v.trim());
 }
 async function uploadBusPhoto(id, file) {
   if (!file) return;
@@ -256,12 +270,14 @@ async function uploadBusPhoto(id, file) {
   const { error } = await supabase.from('buses').update({ photo_url: data.publicUrl }).eq('id', id);
   if (error) return alert('Could not save photo: ' + error.message);
   toast('Bus photo updated');
+  alog('bus.photo', 'buses', 'photo uploaded');
   await loadData(); shell();
 }
 async function removeBusPhoto(id) {
   const { error } = await supabase.from('buses').update({ photo_url: null }).eq('id', id);
   if (error) return alert('Could not remove photo: ' + error.message);
   toast('Photo removed');
+  alog('bus.photo', 'buses', 'photo removed');
   await loadData(); shell();
 }
 function delBus(id) {
@@ -270,6 +286,7 @@ function delBus(id) {
     const { error } = await supabase.from('buses').delete().eq('id', id);
     if (error) return toast('Could not delete: ' + error.message, 'err');
     toast('Bus deleted');
+    alog('bus.delete', 'buses', busLabel(S.buses.find(b => b.id === id) || { name: id }));
     await loadData(); shell();
   });
 }
@@ -317,14 +334,17 @@ async function saveRoute() {
   const { error: rsErr } = await supabase.from('route_stops').insert(rows);
   if (rsErr) return alert('Could not save stops: ' + rsErr.message);
   toast(routeEdit.id ? 'Route updated' : 'Route added');
+  alog(routeEdit.id ? 'route.edit' : 'route.add', 'routes', routeEdit.code.trim() + ' (' + routeEdit.stopIds.length + ' stops)');
   newRouteEdit(); await loadData(); shell();
 }
 function editRoute(id) { const r = S.routes.find(r => r.id === id); routeEdit = { id: r.id, code: r.code, name: r.name || '', description: r.description || '', stopIds: r.route_stops.map(rs => rs.stop_id) }; routesView(); scrollTo({ top: 0, behavior: 'smooth' }); }
 function delRoute(id) {
   confirmBox('Delete route?', 'Delete this route? Trips that used it keep their own times but lose the route label.', async () => {
+    const rc = (S.routes.find(r => r.id === id) || {}).code || id;
     const { error } = await supabase.from('routes').delete().eq('id', id);
     if (error) return toast('Could not delete: ' + error.message, 'err');
     toast('Route deleted');
+    alog('route.delete', 'routes', rc);
     if (routeEdit && routeEdit.id === id) newRouteEdit();
     await loadData(); shell();
   });
@@ -398,6 +418,7 @@ async function saveTrip() {
   const { error: tsErr } = await supabase.from('trip_stops').insert(rowsToInsert);
   if (tsErr) return alert('Could not save stop times: ' + tsErr.message);
   toast(tripEdit.id ? 'Trip updated' : 'Trip added');
+  alog(tripEdit.id ? 'trip.edit' : 'trip.add', 'trips', busLabel(S.buses.find(b => b.id === tripEdit.busId) || {}) + ' · ' + out.length + ' stops');
   newTripEdit(); await loadData(); shell();
 }
 function schedLabel(t) {
@@ -439,6 +460,7 @@ function delTrip(id) {
     const { error } = await supabase.from('trips').delete().eq('id', id);
     if (error) return toast('Could not delete: ' + error.message, 'err');
     toast('Trip deleted');
+    alog('trip.delete', 'trips', id);
     if (tripEdit && tripEdit.id === id) newTripEdit();
     await loadData(); shell();
   });
@@ -513,6 +535,7 @@ async function startMaintenance() {
   if (error) return toast('Could not start maintenance: ' + error.message, 'err');
   maint = { until, message: msg || null };
   toast('Maintenance mode on — public site blocked for ' + maintLabel(mins));
+  alog('settings.maintenance', 'site_settings', 'started for ' + maintLabel(mins));
   announcementsView();
 }
 async function endMaintenance() {
@@ -520,6 +543,7 @@ async function endMaintenance() {
   if (error) return toast('Could not end maintenance: ' + error.message, 'err');
   maint = null;
   toast('Maintenance ended — public site is live again');
+  alog('settings.maintenance', 'site_settings', 'ended early');
   announcementsView();
 }
 async function addAlert() {
@@ -528,10 +552,11 @@ async function addAlert() {
   const { error } = await supabase.from('service_alerts').insert({ route_id, kind, message: message || null, active: true });
   if (error) return toast('Could not add alert: ' + error.message, 'err');
   toast('Service alert published');
+  alog('alert.add', 'service_alerts', kind + ' on route ' + ($('alRoute') ? $('alRoute').selectedOptions[0].textContent : ''));
   announcementsView();
 }
-async function toggleAlert(id, active) { await supabase.from('service_alerts').update({ active }).eq('id', id); toast(active ? 'Alert turned on' : 'Alert turned off'); announcementsView(); }
-async function delAlert(id) { confirmBox('Delete alert?', 'Delete this service alert?', async () => { await supabase.from('service_alerts').delete().eq('id', id); toast('Alert deleted'); announcementsView(); }); }
+async function toggleAlert(id, active) { await supabase.from('service_alerts').update({ active }).eq('id', id); toast(active ? 'Alert turned on' : 'Alert turned off'); alog('alert.toggle', 'service_alerts', active ? 'on' : 'off'); announcementsView(); }
+async function delAlert(id) { confirmBox('Delete alert?', 'Delete this service alert?', async () => { await supabase.from('service_alerts').delete().eq('id', id); toast('Alert deleted'); alog('alert.delete', 'service_alerts', id); announcementsView(); }); }
 async function addAnnouncement() {
   const message = $('annMsg').value.trim();
   if (!message) return alert('Write a message first.');
@@ -539,14 +564,16 @@ async function addAnnouncement() {
   if (error) return alert('Could not publish: ' + error.message);
   annDraft = { message: '', display_type: 'banner' };
   toast('Announcement published');
+  alog('announcement.add', 'announcements', message.slice(0, 120));
   announcementsView();
 }
-async function toggleAnnActive(id, active) { await supabase.from('announcements').update({ active }).eq('id', id); toast(active ? 'Announcement turned on' : 'Announcement turned off'); announcementsView(); }
-async function toggleAnnType(id, display_type) { await supabase.from('announcements').update({ display_type }).eq('id', id); toast('Announcement updated'); announcementsView(); }
+async function toggleAnnActive(id, active) { await supabase.from('announcements').update({ active }).eq('id', id); toast(active ? 'Announcement turned on' : 'Announcement turned off'); alog('announcement.toggle', 'announcements', active ? 'on' : 'off'); announcementsView(); }
+async function toggleAnnType(id, display_type) { await supabase.from('announcements').update({ display_type }).eq('id', id); toast('Announcement updated'); alog('announcement.edit', 'announcements', 'type=' + display_type); announcementsView(); }
 function delAnnouncement(id) {
   confirmBox('Delete announcement?', 'Delete this announcement?', async () => {
     await supabase.from('announcements').delete().eq('id', id);
     toast('Announcement deleted');
+    alog('announcement.delete', 'announcements', id);
     announcementsView();
   }, 'Delete');
 }
@@ -592,6 +619,118 @@ async function analyticsView() {
     <div style="flex:1;min-width:220px"><h3 class="sec-title">Most QR-scanned stops</h3>${topQr.length ? `<ol class="rank">${topQr.map(([id, n]) => `<li><span>${esc(stopName(id))}</span><b>${n}</b></li>`).join('')}</ol>` : '<p class="sub">No data yet.</p>'}</div>
     <div style="flex:1;min-width:220px"><h3 class="sec-title">Top From → To searches</h3>${topPairs.length ? `<ol class="rank">${topPairs.map(([k, n]) => { const [f, t] = k.split('>'); return `<li><span>${esc(stopName(f))} → ${esc(stopName(t))}</span><b>${n}</b></li>`; }).join('')}</ol>` : '<p class="sub">No data yet.</p>'}</div>
   </div>`;
+}
+
+// ====================================================================== BLOG
+let blogEdit = null, blogList = [];
+function newBlogEdit() { blogEdit = { id: null, title: '', slug: '', excerpt: '', cover_url: '', body: '', published: false }; }
+async function blogView() {
+  if (!blogEdit) newBlogEdit();
+  $('body').innerHTML = `<p class="sub">Loading posts…</p>`;
+  const { data, error } = await supabase.from('blog_posts').select('*').order('created_at', { ascending: false });
+  if (error) { $('body').innerHTML = `<p class="err">Could not load posts: ${esc(error.message)}</p>`; return; }
+  blogList = data || [];
+  $('body').innerHTML = `<section class="card"><h2>${blogEdit.id ? 'Edit post' : 'New post'}</h2>
+   <p class="sub">Posts appear on the public <a href="/blog" target="_blank">/blog</a> page. Body is plain text — line breaks are kept, HTML is not rendered.</p>
+   <input id="bpTitle" class="input mt" style="width:100%" placeholder="Title" value="${esc(blogEdit.title)}" oninput="blogEdit.title=this.value;autoSlug()">
+   <input id="bpSlug" class="input mt" style="width:100%" placeholder="slug (auto from title)" value="${esc(blogEdit.slug)}" onchange="blogEdit.slug=this.value">
+   <input id="bpExcerpt" class="input mt" style="width:100%" placeholder="Excerpt (optional, shown on the blog list)" value="${esc(blogEdit.excerpt)}" onchange="blogEdit.excerpt=this.value">
+   <div class="row mt"><input id="bpCover" class="input grow" placeholder="Cover image URL (optional)" value="${esc(blogEdit.cover_url)}" onchange="blogEdit.cover_url=this.value">
+     <label class="btn btn-s" title="Upload a cover image">Upload<input type="file" accept="image/*" style="display:none" onchange="uploadBlogCover(this.files[0])"></label></div>
+   ${blogEdit.cover_url ? `<img src="${esc(blogEdit.cover_url)}" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:10px" alt="Cover preview">` : ''}
+   <textarea id="bpBody" rows="10" class="input mt" placeholder="Write the post…" oninput="blogEdit.body=this.value">${esc(blogEdit.body)}</textarea>
+   <label class="sub mt" style="display:flex;gap:8px;align-items:center"><input type="checkbox" ${blogEdit.published ? 'checked' : ''} onchange="blogEdit.published=this.checked"> Published (visible on the public blog)</label>
+   <div class="row mt"><button class="btn btn-p" onclick="savePost()">${blogEdit.id ? 'Update post' : 'Publish post'}</button><button class="btn btn-s" onclick="newBlogEdit();blogView()">Clear</button></div></section>
+   <h2 class="sec-title" style="margin-top:26px">All posts</h2>
+   <ul class="list">${blogList.map(p => `<li class="arow"><div class="main"><b>${esc(p.title)}</b> <span class="tag">${p.published ? '🟢 Published' : '⚪ Draft'}</span><p class="slug">/blog/${esc(p.slug)} · ${new Date(p.created_at).toLocaleDateString()}</p></div>
+     <div class="acts"><a class="btn btn-s btn-sm" href="/blog/${encodeURIComponent(p.slug)}" target="_blank">View</a><button class="btn btn-s btn-sm" onclick="editPost('${p.id}')">Edit</button><button class="btn btn-d btn-sm" onclick="delPost('${p.id}')">Delete</button></div></li>`).join('') || '<li class="arow sub">No posts yet.</li>'}</ul>`;
+}
+let slugTouched = false;
+function autoSlug() {
+  if (slugTouched || !blogEdit) return;
+  blogEdit.slug = slugify(blogEdit.title);
+  const el = $('bpSlug'); if (el) el.value = blogEdit.slug;
+}
+async function uploadBlogCover(file) {
+  if (!file) return;
+  const path = 'blog/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9.\-]/g, '_');
+  const { error: upErr } = await supabase.storage.from('bus-photos').upload(path, file, { upsert: true });
+  if (upErr) return toast('Upload failed: ' + upErr.message, 'err');
+  const { data } = supabase.storage.from('bus-photos').getPublicUrl(path);
+  blogEdit.cover_url = data.publicUrl;
+  $('bpCover').value = data.publicUrl;
+  toast('Cover uploaded');
+  blogView();
+}
+async function savePost() {
+  const title = $('bpTitle').value.trim();
+  if (!title) return alert('Give the post a title.');
+  let slug = ($('bpSlug').value.trim() || slugify(title)).toLowerCase();
+  if (blogList.some(p => p.slug === slug && p.id !== blogEdit.id)) slug += '-' + uid();
+  const row = { title, slug, excerpt: $('bpExcerpt').value.trim() || null, cover_url: $('bpCover').value.trim() || null, body: $('bpBody').value, published: blogEdit.published };
+  let err;
+  if (blogEdit.id) {
+    ({ error: err } = await supabase.from('blog_posts').update(row).eq('id', blogEdit.id));
+  } else {
+    ({ error: err } = await supabase.from('blog_posts').insert(row));
+  }
+  if (err) return toast('Could not save post: ' + err.message, 'err');
+  toast(blogEdit.id ? 'Post updated' : (row.published ? 'Post published' : 'Draft saved'));
+  alog(row.published ? 'blog.publish' : 'blog.save', 'blog_posts', title);
+  newBlogEdit(); await blogView();
+}
+function editPost(id) {
+  const p = blogList.find(x => x.id === id); if (!p) return;
+  blogEdit = { id: p.id, title: p.title, slug: p.slug, excerpt: p.excerpt || '', cover_url: p.cover_url || '', body: p.body || '', published: p.published };
+  slugTouched = true; blogView(); scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function delPost(id) {
+  const p = blogList.find(x => x.id === id);
+  confirmBox('Delete post?', `Delete "${p ? p.title : 'this post'}"? This cannot be undone.`, async () => {
+    const { error } = await supabase.from('blog_posts').delete().eq('id', id);
+    if (error) return toast('Could not delete: ' + error.message, 'err');
+    toast('Post deleted');
+    alog('blog.delete', 'blog_posts', p ? p.title : id);
+    if (blogEdit && blogEdit.id === id) newBlogEdit();
+    await blogView();
+  });
+}
+// Keep slug manual edits sticky: mark touched when the slug field changes.
+document.addEventListener('input', e => { if (e.target && e.target.id === 'bpSlug') slugTouched = true; });
+
+// ====================================================================== ACTIVITY LOG
+async function activityView() {
+  $('body').innerHTML = `<p class="sub">Loading activity…</p>`;
+  const { data, error } = await supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(300);
+  if (error) { $('body').innerHTML = `<p class="err">Could not load activity: ${esc(error.message)}</p>`; return; }
+  const rows = data || [];
+  $('body').innerHTML = `<section class="card"><h2>Activity log</h2>
+   <p class="sub">Every add / edit / delete / publish by a signed-in admin, newest first (last 300).</p></section>
+   <ul class="list mt2">${rows.map(r => `<li class="arow"><div class="main"><b>${esc(r.action)}</b>${r.detail ? `<p class="slug" style="white-space:normal">${esc(r.detail)}</p>` : ''}</div>
+     <div class="acts" style="flex-direction:column;align-items:flex-end"><span class="tag">${esc(r.user_email || 'admin')}</span><span class="slug">${new Date(r.created_at).toLocaleString()}</span></div></li>`).join('') || '<li class="arow sub">No activity recorded yet.</li>'}</ul>`;
+}
+
+// ====================================================================== SETTINGS
+async function settingsView() {
+  $('body').innerHTML = `<p class="sub">Loading settings…</p>`;
+  const { data } = await supabase.from('site_settings').select('value').eq('key', 'contact').maybeSingle();
+  const c = (data && data.value) || {};
+  $('body').innerHTML = `<section class="card"><h2>Contact details</h2>
+   <p class="sub">Shown on the public Contact page. The WhatsApp number also enables the floating WhatsApp button on the public site (digits only, with country code — e.g. 919876543210).</p>
+   <input id="setEmail" type="email" class="input mt" style="width:100%" placeholder="Contact email" value="${esc(c.email || '')}">
+   <input id="setWa" class="input mt" style="width:100%" placeholder="WhatsApp number (e.g. 919876543210)" value="${esc(c.whatsapp || '')}">
+   <div class="row mt"><button class="btn btn-p" onclick="saveSettings()">Save settings</button></div></section>
+   <section class="card mt2"><h2>Maintenance mode</h2>
+   <p class="sub">Quick link — the full controls (countdown, custom message, service alerts) live in the <b>Announcements</b> tab.</p>
+   <div class="row mt"><button class="btn btn-s" onclick="tab='announcements';shell()">Open Announcements</button></div></section>`;
+}
+async function saveSettings() {
+  const email = $('setEmail').value.trim() || null;
+  const whatsapp = $('setWa').value.trim().replace(/[^\d]/g, '') || null;
+  const { error } = await supabase.from('site_settings').upsert({ key: 'contact', value: { email, whatsapp } }, { onConflict: 'key' });
+  if (error) return toast('Could not save settings: ' + error.message, 'err');
+  toast('Settings saved' + (whatsapp ? ' — WhatsApp button is now live' : ''));
+  alog('settings.contact', 'site_settings', 'email=' + (email || '—') + ' whatsapp=' + (whatsapp || '—'));
 }
 
 init();

@@ -33,6 +33,8 @@ function toggleTheme() {
   document.querySelectorAll('#themeBtn').forEach(b => { b.innerHTML = THEME_ICONS[t]; });
 }
 document.querySelectorAll('#themeBtn').forEach(b => { b.innerHTML = THEME_ICONS[effectiveTheme()]; });
+// Delegated click handler — inline onclick is blocked by CSP on public pages.
+document.addEventListener('click', e => { if (e.target.closest('#themeBtn')) toggleTheme(); });
 
 // ---- IST date helpers for special/holiday schedules
 const IST_DAYS = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };

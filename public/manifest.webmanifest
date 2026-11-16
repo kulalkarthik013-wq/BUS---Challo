@@ -1,13 +1,40 @@
 {
-  "name": "Bus Timings",
-  "short_name": "Bus Timings",
+  "name": "Mangaluru Bus Timings",
+  "short_name": "MLR Bus Timings",
   "description": "Live bus arrival times — search by stop, or plan a from-to journey.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f3f6fb",
-  "theme_color": "#0f6fff",
+  "background_color": "#f6f7fb",
+  "theme_color": "#4f46e5",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ]
 }

@@ -3,25 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f9d6b">
+<meta name="theme-color" content="#4f46e5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1020" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon.svg">
-<title>Bus Timings</title>
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Mangaluru Bus Timings</title>
 <meta name="description" content="Live bus arrival times — search by stop, or plan a from-to journey.">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Bus Timings">
-<meta property="og:title" content="Bus Timings — Live bus arrival times">
+<meta property="og:site_name" content="Mangaluru Bus Timings">
+<meta property="og:title" content="Mangaluru Bus Timings — Live bus arrival times">
 <meta property="og:description" content="Live scheduled arrivals for every stop — search a stop or plan a from-to journey.">
 <link rel="canonical" href="/">
 <meta property="og:url" content="/">
-<meta property="og:image" content="/icon.svg">
+<meta property="og:image" content="/og-image.png">
 <meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+Kannada:wght@400;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
-<script>try{var t=localStorage.getItem('bt-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<script src="/js/theme-init.js"></script>
 </head>
 <body>
 <div id="banner" class="banner"></div>
@@ -29,20 +32,21 @@
   <div class="in">
     <a class="brand" href="/">
       <span class="logo"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 11h16M8 21v-4M16 21v-4M8 14h.01M16 14h.01"/></svg></span>
-      Bus Timings
+      Mangaluru Bus Timings
     </a>
     <div class="h-right">
-      <span class="sub">Live schedule</span>
-      <button id="themeBtn" class="btn btn-s btn-sm" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
+      <span class="sub" data-i18n="live">Live schedule</span>
+      <span id="istClock" class="clock"></span>
+      <button id="themeBtn" class="btn btn-s btn-sm" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
     </div>
   </div>
 </header>
 <main id="app" class="wrap page"></main>
 <nav class="tabbar" aria-label="Main">
-  <a href="/" id="tabHome"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-6h-6v6H5a2 2 0 0 1-2-2z"/></svg>Search</a>
-  <a href="/#live" id="tabLive"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>Live</a>
-  <a href="/#routes" id="tabRoutes"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>Routes</a>
-  <a href="/?fav=1" id="tabFav"><svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-3-5.4 3 1.1-6L3.2 9.4l6.1-.8z"/></svg>Favorites</a>
+  <a href="/" id="tabHome"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-6h-6v6H5a2 2 0 0 1-2-2z"/></svg><span data-i18n="search">Search</span></a>
+  <a href="/#live" id="tabLive"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg><span data-i18n="live">Live</span></a>
+  <a href="/#routes" id="tabRoutes"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span data-i18n="routes">Routes</span></a>
+  <a href="/?fav=1" id="tabFav"><svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-3-5.4 3 1.1-6L3.2 9.4l6.1-.8z"/></svg><span data-i18n="favorites">Favorites</span></a>
 </nav>
 <div id="popupModal" class="modal"></div>
 <div id="lightbox" class="modal"></div>
@@ -50,6 +54,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="/env.js"></script>
 <script src="/js/shared.js"></script>
+<script src="/js/lang.js"></script>
 <script src="/js/footer.js"></script>
 <script src="/js/cookies.js"></script>
 <script src="/js/site.js"></script>
