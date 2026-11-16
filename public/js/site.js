@@ -215,18 +215,10 @@ function liveSection() {
       <span class="linfo"><b>${esc(a.bus.name)}</b><span>at ${esc(a.stop)} → ${esc(a.to)}</span></span>${alertBadge(a.route)}</a>`;
   }).join('')}</div>`;
 }
-function routesSection() {
-  const rs = Object.values(ROUTES);
-  if (!rs.length) return '';
-  const counts = {};
-  TRIPS.forEach(t => { if (t.route_id) counts[t.route_id] = (counts[t.route_id] || 0) + 1; });
-  return `<h2 class="sec-title" id="routes">${t('routes')}</h2><div class="chips">${rs.map(r => `<span class="chip">Route ${esc(r.code)}${r.name ? ' · ' + esc(r.name) : ''} · ${t('tripsCount', { n: counts[r.id] || 0 })}</span>`).join('')}</div>`;
-}
 function stopSearchView() {
   return `<div class="search sticky"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     <input id="q" type="search" value="${esc(qStop)}" placeholder="${favOnly ? t('phFavStop') : t('phStop')}" autocomplete="off"></div>
    ${liveSection()}
-   ${routesSection()}
    <div id="list">${stopResultsHtml()}</div>`;
 }
 function fromToView() {

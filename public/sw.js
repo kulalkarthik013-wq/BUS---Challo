@@ -2,7 +2,7 @@
 // Strategy: precache the app shell; network-first for pages (fresh data),
 // cache-first for static assets. Never caches /env.js or cross-origin
 // (Supabase) requests.
-const CACHE = 'bt-v4';
+const CACHE = 'bt-v5';
 const SHELL = [
   '/',
   '/style.css',
